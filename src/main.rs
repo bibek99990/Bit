@@ -9,6 +9,7 @@ use serenity::{
 
 use songbird::{SerenityInit,input::YoutubeDl};
 use std::env;
+use warp::Filter;
 
 struct Handler;
 
@@ -19,9 +20,7 @@ impl EventHandler for Handler {
 
         println!("{} is online!", ready.user.name);
 
-        let guilds = ready.guilds;
-
-        for guild in guilds {
+        for guild in ready.guilds {
 
             let id = guild.id;
 
@@ -153,10 +152,21 @@ impl EventHandler for Handler {
 
 }
 
+async fn web_server() {
+
+    let route = warp::path::end().map(|| "Bot Running 24/7");
+
+    warp::serve(route)
+        .run(([0,0,0,0], 3000))
+        .await;
+}
+
 #[tokio::main]
 async fn main() {
 
     dotenv::dotenv().ok();
+
+    tokio::spawn(web_server());
 
     let token = env::var("DISCORD_TOKEN").expect("Token missing");
 
