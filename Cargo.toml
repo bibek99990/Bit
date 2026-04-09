@@ -4,17 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-serenity = { version = "0.11", default-features = false, features = [
-"client",
-"gateway",
-"model",
-"cache",
-"rustls_backend"
-] }
+serenity = { version = "0.11", default-features = false, features = ["client","gateway","model","cache","rustls_backend"] }
 
 songbird = { version = "0.3", features = ["yt-dlp"] }
 
 tokio = { version = "1", features = ["macros","rt-multi-thread"] }
 
 warp = "0.3"
+
 dotenv = "0.15"
