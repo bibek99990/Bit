@@ -1,13 +1,21 @@
 use serenity::{
     async_trait,
     model::{
-        application::interaction::{Interaction, InteractionResponseType},
         gateway::Ready,
+        application::interaction::{
+            Interaction,
+            InteractionResponseType,
+        },
+        prelude::*,
     },
     prelude::*,
 };
 
-use songbird::{SerenityInit,input::YoutubeDl};
+use songbird::{
+    SerenityInit,
+    input::YoutubeDl
+};
+
 use std::env;
 use warp::Filter;
 
@@ -22,128 +30,93 @@ impl EventHandler for Handler {
 
         for guild in ready.guilds {
 
-            let id = guild.id;
-
-            let _ = id.set_application_commands(&ctx.http, |commands| {
+            let _ = guild.id.set_application_commands(&ctx.http, |commands| {
 
                 commands.create_application_command(|c| {
+
                     c.name("play")
                     .description("Play music")
+
                     .create_option(|o| {
+
                         o.name("song")
                         .description("Song name")
-                        .kind(serenity::model::prelude::command::CommandOptionType::String)
+                        .kind(CommandOptionType::String)
                         .required(true)
+
                     })
-                });
 
-                commands.create_application_command(|c| {
-                    c.name("skip")
-                    .description("Skip current song")
-                });
-
-                commands.create_application_command(|c| {
-                    c.name("stop")
-                    .description("Stop music")
                 });
 
                 commands
 
             }).await;
+
         }
+
     }
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
 
         if let Interaction::ApplicationCommand(command) = interaction {
 
-            let guild_id = command.guild_id.unwrap();
-
-            let manager = songbird::get(&ctx).await.unwrap().clone();
-
             if command.data.name == "play" {
 
-                let query = command.data.options[0].value
+                let query = command.data.options[0]
+                    .value
                     .as_ref()
                     .unwrap()
                     .as_str()
                     .unwrap();
 
-                let channel_id = command.member
-                    .as_ref()
+                let guild_id = command.guild_id.unwrap();
+
+                let manager = songbird::get(&ctx)
+                    .await
                     .unwrap()
-                    .voice
-                    .as_ref()
-                    .unwrap()
-                    .channel_id
-                    .unwrap();
+                    .clone();
 
-                let handler = manager.join(guild_id, channel_id).await;
+                let channel_id = {
 
-                if let Ok(handler_lock) = handler {
+                    let guild = guild_id
+                        .to_guild_cached(&ctx.cache)
+                        .unwrap();
 
-                    let mut handler = handler_lock.lock().await;
+                    let voice_state = guild
+                        .voice_states
+                        .get(&command.user.id)
+                        .unwrap();
 
-                    let source = YoutubeDl::new(query.to_string());
+                    voice_state
+                        .channel_id
+                        .unwrap()
 
-                    handler.play_source(source.into());
+                };
 
-                }
+                let (handler_lock, _) = manager
+                    .join(guild_id, channel_id)
+                    .await;
 
-                let _ = command.create_interaction_response(&ctx.http, |r| {
+                let mut handler = handler_lock
+                    .lock()
+                    .await;
 
-                    r.kind(InteractionResponseType::ChannelMessageWithSource)
-                    .interaction_response_data(|m| {
+                let source = YoutubeDl::new(query.to_string());
 
-                        m.content(format!("🎵 Playing {}", query))
-
-                    })
-
-                }).await;
-            }
-
-            if command.data.name == "skip" {
-
-                if let Some(handler_lock) = manager.get(guild_id) {
-
-                    let handler = handler_lock.lock().await;
-
-                    handler.queue().skip().unwrap();
-
-                }
+                handler.play_source(source.into());
 
                 let _ = command.create_interaction_response(&ctx.http, |r| {
 
                     r.kind(InteractionResponseType::ChannelMessageWithSource)
-                    .interaction_response_data(|m| {
 
-                        m.content("⏭ Skipped")
+                        .interaction_response_data(|m| {
 
-                    })
+                            m.content(format!("🎵 Playing: {}", query))
 
-                }).await;
-            }
-
-            if command.data.name == "stop" {
-
-                if let Some(handler_lock) = manager.get(guild_id) {
-
-                    let handler = handler_lock.lock().await;
-
-                    handler.queue().stop();
-
-                }
-
-                let _ = command.create_interaction_response(&ctx.http, |r| {
-
-                    r.kind(InteractionResponseType::ChannelMessageWithSource)
-                    .interaction_response_data(|m| {
-
-                        m.content("⏹ Music stopped")
-
-                    })
+                        })
 
                 }).await;
+
             }
 
         }
@@ -154,11 +127,13 @@ impl EventHandler for Handler {
 
 async fn web_server() {
 
-    let route = warp::path::end().map(|| "Bot Running 24/7");
+    let route = warp::path::end()
+        .map(|| "Rust Discord Music Bot Running 24/7");
 
     warp::serve(route)
         .run(([0,0,0,0], 3000))
         .await;
+
 }
 
 #[tokio::main]
@@ -168,15 +143,21 @@ async fn main() {
 
     tokio::spawn(web_server());
 
-    let token = env::var("DISCORD_TOKEN").expect("Token missing");
+    let token = env::var("DISCORD_TOKEN")
+        .expect("DISCORD_TOKEN not set");
 
-    let intents = GatewayIntents::non_privileged()
+    let intents =
+        GatewayIntents::GUILD_MESSAGES
         | GatewayIntents::GUILD_VOICE_STATES;
 
     let mut client = Client::builder(token, intents)
+
         .event_handler(Handler)
+
         .register_songbird()
+
         .await
+
         .expect("Error creating client");
 
     if let Err(why) = client.start().await {
