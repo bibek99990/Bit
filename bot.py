@@ -3,16 +3,36 @@ from discord.ext import commands
 import yt_dlp
 import os
 import asyncio
+from dotenv import load_dotenv
+from flask import Flask
+from threading import Thread
 
-TOKEN = "YOUR_DISCORD_TOKEN"
+# Load .env
+load_dotenv()
+TOKEN = os.getenv("DISCORD_TOKEN")
 
+# Discord setup
 intents = discord.Intents.default()
 intents.message_content = True
-
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 progress_message = None
 
+# Flask server (keep alive)
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot is running!"
+
+def run():
+    app.run(host='0.0.0.0', port=8080)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+
+# Download progress hook
 def progress_hook(d):
     global progress_message
 
@@ -54,7 +74,10 @@ async def audio(ctx, url):
     try:
         loop = asyncio.get_event_loop()
 
-        await loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(ydl_opts).download([url]))
+        await loop.run_in_executor(
+            None,
+            lambda: yt_dlp.YoutubeDL(ydl_opts).download([url])
+        )
 
         await ctx.send("✅ Uploading audio...")
         await ctx.send(file=discord.File("audio.mp3"))
@@ -64,4 +87,8 @@ async def audio(ctx, url):
     except Exception as e:
         await ctx.send(f"❌ Error: {e}")
 
+# Start Flask keep alive
+keep_alive()
+
+# Run bot
 bot.run(TOKEN)
